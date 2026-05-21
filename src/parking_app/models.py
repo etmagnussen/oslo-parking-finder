@@ -13,6 +13,10 @@ from typing import Any
 
 
 # Canonical field order for normalized CSV output.
+#
+# Adding new fields: append to the end with a ``None`` default on the
+# dataclass below. Never re-order or rename existing fields without an ADR
+# entry in PROJECT_NOTES.md — the CSV column order depends on this tuple.
 FIELDS: tuple[str, ...] = (
     "name",
     "address",
@@ -23,6 +27,14 @@ FIELDS: tuple[str, ...] = (
     "source_url",
     "source_type",
     "last_checked",
+    # Capacity / facility detail — populated by adapters that have access
+    # to per-facility detail (e.g. parkeringsregister detail endpoint).
+    "paid_spaces",
+    "free_spaces",
+    "charging_spaces",
+    "accessible_spaces",
+    "facility_type",
+    "is_park_and_ride",
 )
 
 
@@ -45,6 +57,13 @@ class ParkingRecord:
     last_checked: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat(timespec="seconds")
     )
+    # ---- Capacity / facility detail (optional, populated when available) ----
+    paid_spaces: int | None = None         # antallAvgiftsbelagtePlasser
+    free_spaces: int | None = None         # antallAvgiftsfriePlasser
+    charging_spaces: int | None = None     # antallLadeplasser
+    accessible_spaces: int | None = None   # antallForflytningshemmede
+    facility_type: str | None = None       # typeParkeringsomrade (e.g. LANGS_KJOREBANE, PARKERINGSHUS)
+    is_park_and_ride: bool | None = None   # innfartsparkering JA/NEI -> True/False/None
 
     def to_row(self) -> dict[str, Any]:
         """Return a dict keyed by ``FIELDS`` suitable for ``csv.DictWriter``."""
