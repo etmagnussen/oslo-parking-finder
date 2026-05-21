@@ -154,26 +154,33 @@ Disse reglene gjelder med mindre vi eksplisitt avtaler noe annet.
 Prioritert. Når et steg er ferdig, flytt til "Gjort" og legg til en
 ADR-post under §2 hvis det innebar et reelt valg.
 
-1. **Onepark-adapter (MVP).** HTML-parsing av anleggslistene på
-   onepark.no. Felter: navn, adresse, by, lat/lon (geokod hvis ikke
-   eksponert). Skriv `data/normalized/onepark.csv`. Offline-test med
-   lagret HTML-fikstur.
-2. **Utvid `ParkingRecord` med prisfelter.** `price_per_hour`,
-   `price_per_day`, `currency` — alle `None` by default. Oppdater
-   `FIELDS`, CSV-skriver, README-tabell og en ADR-post her.
-3. **Oslo kommune-adapter.** Identifiser riktig GeoJSON-datasett på
-   data.oslo.kommune.no (start med beboerparkering / avgiftssoner).
-   Mapper polygon → representativt punkt + sonenavn.
-4. **Aimo Park-adapter.** Undersøk app-backend; HTML som fallback.
-5. **Kryssreferanse på koordinater.** Match operatør-anlegg mot
+1. **Oslo kommune-adapter — takstgrupper.** Parse priser per takstgruppe
+   (2012, 2200, 2300, ...) fra
+   [oslo.kommune.no](https://www.oslo.kommune.no/gate-transport-og-parkering/parkering/priser-og-betaling-for-parkering/).
+   Gir oss "hva koster sone X for elbil/fossilbil", samt avgiftstider
+   (når er det gratis utenfor avgiftstid).
+2. **Utvid `ParkingRecord` med prisfelter.** Foreslått:
+   `tariff_group`, `price_per_hour_petrol`, `price_per_hour_ev`,
+   `free_outside_hours_from`, `free_outside_hours_to`, `currency`.
+   Alle nullable.
+3. **Onepark-adapter (MVP).** HTML-parsing av anleggslistene på
+   onepark.no, med priser om mulig. Offline-test med lagret HTML-fikstur.
+4. **Google Maps deep-link helper.** Funksjon som genererer
+   `https://www.google.com/maps/dir/?api=1&destination={lat},{lon}` per
+   rad. Trinn på veien mot appen brukeren beskrev.
+5. **Oslo kommune-adapter — sone-GeoJSON.** Identifiser riktig datasett
+   på data.oslo.kommune.no for soner/beboerparkering. Mapper polygon
+   → representativt punkt + sonenavn, lenker mot takstgruppe.
+6. **Aimo Park-adapter.** Undersøk app-backend; HTML som fallback.
+7. **Kryssreferanse på koordinater.** Match operatør-anlegg mot
    Parkeringsregisteret innen ~50 m for å bygge én logisk rad per
    fysisk anlegg. Vurder om dette skal bo i en egen `merge.py`.
-6. **Bytt CSV → SQLite.** Behold CSV-eksport som artefakt. Trigger:
+8. **Bytt CSV → SQLite.** Behold CSV-eksport som artefakt. Trigger:
    3+ kilder integrert.
-7. **Datakvalitetstester.** Andel med koordinater, lat/lon innenfor
+9. **Datakvalitetstester.** Andel med koordinater, lat/lon innenfor
    Oslo bbox, ingen duplikat-`id`-er, ikke-tomme `name`.
-8. **Schedulering.** GitHub Actions: daglig ingest, commit normaliserte
-   CSV-er for historikk-diff.
+10. **Schedulering.** GitHub Actions: daglig ingest, commit normaliserte
+    CSV-er for historikk-diff.
 
 ---
 

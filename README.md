@@ -58,6 +58,12 @@ Felles felter for alle adaptere. Definert i
 | `source_url` | str \| null | URL som peker tilbake til kildedata |
 | `source_type` | str | F.eks. `parkeringsregister`, `onepark` |
 | `last_checked` | str | ISO 8601 UTC, satt ved normalisering |
+| `paid_spaces` | int \| null | Avgiftsbelagte plasser (fra detalj-endepunkt) |
+| `free_spaces` | int \| null | **Avgiftsfrie plasser** — grunnlaget for "gratis parkering" |
+| `charging_spaces` | int \| null | Ladeplasser |
+| `accessible_spaces` | int \| null | HC-plasser |
+| `facility_type` | str \| null | F.eks. `LANGS_KJOREBANE`, `PARKERINGSHUS`, `AVGRENSET_OMRADE` |
+| `is_park_and_ride` | bool \| null | Innfartsparkering (JA/NEI → True/False) |
 
 Råpayload lagres alltid uendret i `data/raw/<source>_<ts>.json` for
 revisjon/feilsøking.
@@ -78,8 +84,17 @@ parking-ingest-register
 # Alternativ: hele Norge, inkluder deaktiverte
 parking-ingest-register --municipality '' --include-inactive
 
+# Berik radene med kapasitet (gratis-plasser, lade, HC, innfartsparkering).
+# Ett detalj-kall per anlegg — disk-cache i data/raw/details/ gjør re-kjøring rask.
+parking-ingest-register-details              # ~2–3 min første gang
+parking-ingest-register-details --limit 50   # rask røyk-test
+parking-ingest-register-details --refresh    # ignorer cache
+
 # Tester
 pytest -q
+
+# Hel-prosjekt verifikasjon (struktur + imports + pytest + CSV-sanity)
+python scripts/verify.py
 ```
 
 Etter kjøring:
@@ -87,7 +102,11 @@ Etter kjøring:
 - `data/raw/parkeringsregister_<timestamp>.json` — råpayload
 - `data/normalized/parkeringsregister.csv` — normaliserte rader
 
-Forventet resultat i dag: ~21 000 hentet totalt, ~3 300 aktive Oslo-rader.
+Forventet resultat i dag:
+- `parking-ingest-register`: ~21 000 hentet totalt, ~3 300 aktive Oslo-rader.
+- `parking-ingest-register-details`: samme rader, beriket med kapasitet.
+  Av ~3 300 Oslo-anlegg har **~1 700 minst én avgiftsfri plass**, ~570
+  har ladeplasser, og ~30 er innfartsparkering.
 
 ## Prosjektstruktur
 
