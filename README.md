@@ -27,6 +27,7 @@ frontend, ingen pris-beregning ennå.
 | Onepark | 🟡 Stub | (senere) anlegg, adresse, priser | Ingen åpent API funnet — må parses fra onepark.no |
 | Aimo Park | 🟡 Stub | (senere) anlegg, adresse, ev. ledig kapasitet | App-backend kan ha JSON-endepunkt |
 | Oslo kommune / Bil i Oslo | 🟡 Stub | (senere) gateparkering, beboerparkering, soner | Sannsynligvis GeoJSON via [data.oslo.kommune.no](https://data.oslo.kommune.no/) |
+| EasyPark | ⛔ Utelatt | — | Lukket API + bare betalingskanal. Se `adapters/easypark.py` for begrunnelse. |
 
 ### Parkeringsregisteret — endepunkt
 

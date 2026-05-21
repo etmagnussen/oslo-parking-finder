@@ -64,6 +64,15 @@ Onepark, Aimo Park og Oslo kommune har skjelett-moduler som hever
 `NotImplementedError`. Dette låser grensesnittet (`SOURCE_TYPE` + `fetch()
 -> list[ParkingRecord]`) før vi bygger ut.
 
+### 2026-05-21 — EasyPark utelatt som datakilde
+Evaluert etter forslag fra bruker. Konklusjon: ikke nå. To grunner:
+(1) Utviklerportalen krever kommersiell avtale; ingen åpen tilgang.
+(2) EasyPark er en *betalingskanal*, ikke et priskatalog — prisene
+eies av operatøren (kommunen, Aimo, Onepark, ...) som vi allerede
+planlegger å hente direkte. Hvis vi senere vil vise "betal med EasyPark"
+på en rad, blir det et `payment_methods`-felt på `ParkingRecord`,
+ikke en egen adapter. Dokumentert i `adapters/easypark.py`.
+
 ---
 
 ## 3. Gjeldende arbeidsregler
@@ -132,6 +141,7 @@ Disse reglene gjelder med mindre vi eksplisitt avtaler noe annet.
 | Adapter: Onepark | 🟡 stub | Implementasjonsplan i modulen |
 | Adapter: Aimo Park | 🟡 stub | Implementasjonsplan i modulen |
 | Adapter: Oslo kommune | 🟡 stub | Implementasjonsplan i modulen |
+| EasyPark | ⛔ utelatt | Lukket API + bare betalingskanal. Se `adapters/easypark.py`. |
 | Tester | ✅ | 5/5 grønne (`tests/test_normalize.py`) |
 | Verifikasjonsscript | ✅ | `scripts/verify.py` — struktur + imports + pytest + CSV-sanity |
 | CI / scheduling | ⛔ | Ikke startet |
@@ -192,3 +202,6 @@ Ting vi ikke har bestemt enda. Når en blir besvart, flytt svaret til
   `scripts/verify.py` (struktur + imports + pytest + CSV-sanity).
   Full verifikasjon kjørt: 5/5 tester grønne, 3 322 Oslo-rader, 100 %
   koordinatdekning, 100 % innenfor Oslo bbox.
+- **2026-05-21** — EasyPark evaluert og forkastet som datakilde
+  (ADR-post over). Lagt til `adapters/easypark.py` som dokumentert
+  blindspor (ingen `fetch()`).
