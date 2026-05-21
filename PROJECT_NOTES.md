@@ -106,6 +106,19 @@ Disse reglene gjelder med mindre vi eksplisitt avtaler noe annet.
 - Stopp og spør bare når et valg har vesentlig påvirkning (datamodell,
   ny avhengighet, ny lagringsteknologi).
 
+**Edit → verify-løkke (obligatorisk fra 2026-05-21)**
+1. Etter enhver endring i kodefiler skal det kjøres relevant verifikasjon:
+   tester hvis de finnes, ellers script-kjøring, import-validering eller
+   filsjekk — den sterkeste praktiske kontrollen.
+2. Ny funksjonalitet skal følges av minst én enkel test eller kjørbar
+   verifikasjon når det er praktisk.
+3. Hvis verifikasjon feiler: forsøk å rette automatisk og kjør på nytt.
+   Gjenta til den består, eller til vi er reelt blokkert og trenger
+   input fra bruker.
+4. Foretrekk små endringer fremfor store.
+5. Rapport per oppgave skal inneholde: filer endret, verifikasjon kjørt,
+   resultat, eventuelle feil rettet, anbefalt neste steg.
+
 ---
 
 ## 4. Status
@@ -120,6 +133,7 @@ Disse reglene gjelder med mindre vi eksplisitt avtaler noe annet.
 | Adapter: Aimo Park | 🟡 stub | Implementasjonsplan i modulen |
 | Adapter: Oslo kommune | 🟡 stub | Implementasjonsplan i modulen |
 | Tester | ✅ | 5/5 grønne (`tests/test_normalize.py`) |
+| Verifikasjonsscript | ✅ | `scripts/verify.py` — struktur + imports + pytest + CSV-sanity |
 | CI / scheduling | ⛔ | Ikke startet |
 | Prisdata | ⛔ | Krever operatør-adapter |
 
@@ -174,3 +188,7 @@ Ting vi ikke har bestemt enda. Når en blir besvart, flytt svaret til
   Parkeringsregister-adapter, README, tester. Første ingest kjørte OK:
   21 660 hentet, 3 322 normaliserte Oslo-rader.
 - **2026-05-21** — Lagt til `PROJECT_NOTES.md` som levende prosjektminne.
+- **2026-05-21** — Vedtatt edit → verify-løkke som arbeidsregel. Lagt til
+  `scripts/verify.py` (struktur + imports + pytest + CSV-sanity).
+  Full verifikasjon kjørt: 5/5 tester grønne, 3 322 Oslo-rader, 100 %
+  koordinatdekning, 100 % innenfor Oslo bbox.
