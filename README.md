@@ -151,6 +151,12 @@ oslo-parking-finder/
 8. **Datakvalitetstester.** Sjekk f.eks. at >95 % har koordinater,
    at lat/lon ligger innenfor Oslo bbox, ingen duplikat-id-er.
 
+## Prosjektlogg
+
+Se [`PROJECT_NOTES.md`](PROJECT_NOTES.md) for mål, beslutninger,
+arbeidsregler og neste planlagte steg. Den filen er det levende
+prosjektminnet og leses først ved gjenopptakelse av arbeid.
+
 ## Lisens
 
 MIT.
