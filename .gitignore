@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+
+# Data (keep dir structure, ignore contents)
+data/raw/*
+!data/raw/.gitkeep
+data/normalized/*
+!data/normalized/.gitkeep
+
+# Tooling
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.DS_Store

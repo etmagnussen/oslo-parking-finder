@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oslo-parking-finder"
+version = "0.1.0"
+description = "Data ingest pipeline for cheap parking in Oslo."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "etmagnussen" }]
+dependencies = [
+    # Standard library is preferred. requests is the only runtime dependency
+    # because urllib's error handling for retries/timeouts is noisy.
+    "requests>=2.31",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+parking-ingest-register = "parking_app.ingest.fetch_register:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
