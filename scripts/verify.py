@@ -40,10 +40,11 @@ REQUIRED_FILES = [
     "tests/.gitkeep",
 ]
 
-EXPECTED_HEADER = [
-    "name", "address", "municipality", "lat", "lon",
-    "operator", "source_url", "source_type", "last_checked",
-]
+# Header is sourced from the canonical FIELDS tuple so this script does not
+# drift when the schema is extended (e.g. detail-ingest adds capacity fields).
+# Imported lazily inside check_normalized_csv so the file-existence step can
+# still surface missing-source-files cleanly.
+EXPECTED_HEADER: list[str] | None = None
 
 # Rough Oslo bounding box (WGS84): used as a smoke test, not a strict filter.
 OSLO_BBOX = (59.80, 60.15, 10.45, 10.95)  # lat_min, lat_max, lon_min, lon_max
@@ -104,9 +105,12 @@ def check_normalized_csv() -> None:
     if not rows:
         raise SystemExit("CSV is empty")
 
+    from parking_app.models import FIELDS  # local import; src already on sys.path
+
     header = list(rows[0].keys())
-    if header != EXPECTED_HEADER:
-        raise SystemExit(f"Unexpected header: {header}")
+    expected = list(FIELDS)
+    if header != expected:
+        raise SystemExit(f"Header mismatch:\n  got:      {header}\n  expected: {expected}")
 
     bad_url = [r for r in rows if not re.search(r"/parkeringsomraade/\d+$", r["source_url"])]
     if bad_url:

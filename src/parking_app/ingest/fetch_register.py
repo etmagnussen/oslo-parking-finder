@@ -159,6 +159,28 @@ def normalize_many(
     return out
 
 
+def filter_items(
+    items: Iterable[dict[str, Any]],
+    *,
+    municipality: str | None = DEFAULT_MUNICIPALITY,
+    only_active: bool = True,
+) -> list[dict[str, Any]]:
+    """Return raw API items matching the active/municipality filters.
+
+    Same predicates as :func:`normalize_many` but returns raw dicts so a
+    caller (e.g. ``fetch_register_details``) can enrich them with detail
+    data before normalization.
+    """
+    out: list[dict[str, Any]] = []
+    for item in items:
+        if only_active and not is_active(item):
+            continue
+        if not matches_municipality(item, municipality):
+            continue
+        out.append(item)
+    return out
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
