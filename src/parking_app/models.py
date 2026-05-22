@@ -35,6 +35,17 @@ FIELDS: tuple[str, ...] = (
     "accessible_spaces",
     "facility_type",
     "is_park_and_ride",
+    # Pricing / zone detail — populated by adapters that have access to
+    # tariff data (e.g. Oslo kommune Bymiljøetaten via geodata.bymoslo.no).
+    "tariff_group",
+    "price_per_hour_petrol",
+    "price_per_hour_ev",
+    "price_max_minutes",
+    "price_active_hours",
+    "residential_zone",
+    "night_parking_forbidden",
+    "total_spaces",
+    "notes",
 )
 
 
@@ -64,6 +75,16 @@ class ParkingRecord:
     accessible_spaces: int | None = None   # antallForflytningshemmede
     facility_type: str | None = None       # typeParkeringsomrade (e.g. LANGS_KJOREBANE, PARKERINGSHUS)
     is_park_and_ride: bool | None = None   # innfartsparkering JA/NEI -> True/False/None
+    # ---- Pricing / zone detail (optional, populated when available) ----
+    tariff_group: str | None = None             # takstgruppe1 (e.g. "2310")
+    price_per_hour_petrol: float | None = None  # NOK/hour for petrol/diesel/hybrid
+    price_per_hour_ev: float | None = None      # NOK/hour for EV
+    price_max_minutes: int | None = None        # max allowed parking duration
+    price_active_hours: str | None = None       # human-readable hours, e.g. "man-fre 09-17"
+    residential_zone: str | None = None         # beboerparkeringssone (e.g. "J")
+    night_parking_forbidden: bool | None = None # nattparkeringsforbud
+    total_spaces: int | None = None             # total spaces when split is unavailable
+    notes: str | None = None                    # free-text remarks (e.g. fritekst)
 
     def to_row(self) -> dict[str, Any]:
         """Return a dict keyed by ``FIELDS`` suitable for ``csv.DictWriter``."""

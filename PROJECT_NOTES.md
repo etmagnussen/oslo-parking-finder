@@ -100,6 +100,110 @@ Frontend-koden kan senere bytte datakilde fra inlinet JSON til et
 `parking_app.web.build_map` slik at den kan testes; HTML-malen bruker
 str.replace (ikke f-string) for å unngå brace-konflikt med JS.
 
+### 2026-05-22 — ADR-UTKAST: ParkingRecord-felter for Oslo kommune-data
+
+> Status: **UTKAST — venter på godkjenning fra bruker før implementering.**
+> Dette er svar på "spørsmål 3" av 5 i recon-runden. De andre fire
+> (geometri-lagring, deduplisering, kart-rendering, adapter-splitt) er
+> bevisst utelatt her — de blir egne ADR-utkast etter at modellen er låst.
+
+**Bakgrunn.** Data-recon viste at
+`geodata.bymoslo.no/arcgis/rest/services/geodata/Parkering/MapServer/27`
+gir 6 207 polygoner med priser, takstgruppe, beboerparkeringssone og
+antall plasser. På Økern Torgvei finnes ~20 polygoner med totalt 50–100
+faktiske plasser, mot Parkeringsregisterets "1 plass". Brukerens vedlagte
+bilder bekrefter dette visuelt (Google Maps viser lange parkerings­rekker;
+vårt kart viser ett kryss).
+
+**Beslutning (foreslått).** Utvid `ParkingRecord` med følgende
+bakoverkompatible nullable felter, alle `None` by default:
+
+| Felt | Type | Kilde-felt (Oslo kommune) | Eksempelverdi |
+|---|---|---|---|
+| `tariff_group` | `str \| None` | `takstgruppe1` | `"2310"` |
+| `price_per_hour_petrol` | `float \| None` | `pris_bensin_diesel_hybrid` (parsed) | `42.0` |
+| `price_per_hour_ev` | `float \| None` | `pris_elbil` (parsed) | `21.0` |
+| `price_max_minutes` | `int \| None` | `pris_maks_tid` (parsed) | `120` |
+| `price_active_hours` | `str \| None` | `pris_tidspunkt_du_må_betale` | `"man–fre 09–17"` |
+| `residential_zone` | `str \| None` | `beboerparkeringssone` | `"J"` |
+| `night_parking_forbidden` | `bool \| None` | `nattparkeringsforbud` | `True` |
+| `total_spaces` | `int \| None` | `beregnet_antall` (fallback `befart_antall`) | `5` |
+| `notes` | `str \| None` | `fritekst` | `"Maks 2 timer ..."` |
+
+**Begrunnelse, felt for felt:**
+
+- `tariff_group`: nøkkel for å koble mot pris-tabeller når vi senere
+  henter andre lag (`Gateparkering/MapServer/6` har takstgruppe→pris).
+  Holdes som streng — Oslo bruker firesifrede koder (`2310`, `2200`,
+  `2012`) som ikke bør tolkes som tall.
+- `price_per_hour_petrol` og `price_per_hour_ev`: separate fordi elbil-
+  prisen er en del av kjernen i "billig parkering". Vi parser ut tallet
+  fra strenger som `"42 kr/time"`. NOK forutsettes — ingen `currency`-felt
+  før vi har data fra flere land.
+- `price_max_minutes`: maksimal tillatt parkeringstid (`"2 timer"` →
+  `120`). Viktig for sammenligning: en p-plass med makstid 30 min er
+  ikke konkurrent til en p-plass uten makstid selv om timeprisen er lik.
+- `price_active_hours`: vi lagrer den menneskelige strengen først, ikke
+  en strukturert tidsplan. Mappingen til strukturert form er en egen,
+  vanskelig oppgave (rushtid, helg, helligdag) — den lever bedre i en
+  sekundærtabell senere. Jf. åpent spørsmål i §6.
+- `residential_zone`: beboerparkeringssone (A–N i Oslo). Avgjør hvem
+  som har lov til å stå der gratis.
+- `night_parking_forbidden`: viktig negativ informasjon — "gratis dagtid,
+  forbudt natt" er ikke det samme som "gratis".
+- `total_spaces`: vi har allerede `paid_spaces`, `free_spaces`,
+  `charging_spaces`, `accessible_spaces`. `total_spaces` er ikke
+  redundant fordi Oslo kommune-data oppgir et totalt antall plasser
+  som ikke alltid kan splittes etter avgift/lade/HC fra deres side.
+  Når vi har splitt, lar vi de eksisterende feltene være sannheten; når
+  vi bare har totalen, fyller vi `total_spaces` og lar de andre være
+  `None`.
+- `notes`: rå-fritekst fra `fritekst`-feltet. Brukes i popup i kartet.
+
+**Hva vi *ikke* legger til nå:**
+
+- `geometry` (polygon): Hører hjemme i "spørsmål 1" (geometri-lagring),
+  som krever en separat beslutning om CSV→SQLite-migrering. Holdes ute
+  av denne ADR-en med vilje.
+- `payment_methods` (EasyPark/kort/mynt): Aktuelt senere; ingen Oslo-
+  kommune-felt i recon-en svarer direkte til dette.
+- `currency`: hardkodet NOK inntil vi har flere land.
+- `free_outside_hours_from/to` (foreslått i §5 punkt 3): Erstattes av
+  `price_active_hours` som rå streng. Strukturert tidsplan utsettes.
+
+**Konsekvenser:**
+
+- `models.FIELDS` vokser fra 15 til 24 kolonner. Eksisterende CSV-er
+  forblir lesbare hvis vi alltid appender (som regelen sier).
+- `scripts/verify.py` leser allerede header direkte fra `FIELDS` — ingen
+  endring nødvendig der.
+- README-tabellen og `tests/` må oppdateres samtidig som modellen, ellers
+  driver dokumentasjon og kode fra hverandre.
+- Adaptere som ikke har disse feltene (Parkeringsregisteret, Onepark,
+  Aimo) forblir uendret — de produserer `None` for de nye feltene, og
+  rekkefølgen i `FIELDS` håndterer CSV-justeringen automatisk.
+
+**Verifikasjonsplan ved implementering:**
+
+1. Utvid `FIELDS` og `ParkingRecord` med de 9 feltene over (alle `None`).
+2. Legg til én ny test i `tests/test_models.py` (eller eksisterende
+  ekvivalent) som konstruerer en `ParkingRecord` med alle nye felter
+  satt og verifiserer at `to_row()` produserer riktige verdier.
+3. Kjør hele test-suiten + `scripts/verify.py` — alt skal være grønt før
+  commit.
+4. Commit: `feat(models): add Oslo kommune pricing/zone fields to ParkingRecord`.
+
+**Åpne spørsmål i denne ADR-en:**
+
+- Skal `price_per_hour_petrol` hete bare `price_per_hour`? Argument *for*:
+  enklere, og den fossile prisen er "hovedprisen". Argument *mot*: vi har
+  allerede separat elbil-pris, så symmetriske navn er ryddigere. **Mitt
+  forslag: behold `_petrol`-suffikset for symmetri.**
+- Bør `total_spaces` heller hete `estimated_spaces` siden Oslo kommune
+  selv kaller det "beregnet_antall"? **Mitt forslag: `total_spaces` —
+  navnet skal beskrive hva det er, ikke hvordan det ble målt. Metadata
+  om kilde finnes uansett via `source_url` + `source_type`.**
+
 ### 2026-05-22 — GitHub Pages + ukentlig auto-bygging, kartet som PWA
 Fase 1.5: publisere kartet på GitHub Pages slik at brukeren åpner
 `https://etmagnussen.github.io/oslo-parking-finder/` på telefonen uten
