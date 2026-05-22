@@ -31,6 +31,7 @@ REQUIRED_FILES = [
     "src/parking_app/storage.py",
     "src/parking_app/ingest/__init__.py",
     "src/parking_app/ingest/fetch_register.py",
+    "src/parking_app/ingest/fetch_oslo_kommune.py",
     "src/parking_app/adapters/__init__.py",
     "src/parking_app/adapters/onepark.py",
     "src/parking_app/adapters/aimopark.py",
@@ -75,7 +76,15 @@ def check_imports() -> None:
     importlib.import_module("parking_app.models")
     importlib.import_module("parking_app.storage")
     importlib.import_module("parking_app.ingest.fetch_register")
-    for name in ("onepark", "aimopark", "oslo_kommune"):
+    # oslo_kommune is now implemented — just check the module imports and
+    # exposes the required public surface.
+    oslo_kommune = importlib.import_module("parking_app.adapters.oslo_kommune")
+    assert callable(getattr(oslo_kommune, "fetch", None)), "oslo_kommune.fetch missing"
+    assert oslo_kommune.SOURCE_TYPE, "oslo_kommune.SOURCE_TYPE missing"
+    print("  OK  oslo_kommune adapter implemented")
+    importlib.import_module("parking_app.ingest.fetch_oslo_kommune")
+    print("  OK  ingest.fetch_oslo_kommune imports")
+    for name in ("onepark", "aimopark"):
         mod = importlib.import_module(f"parking_app.adapters.{name}")
         try:
             mod.fetch()

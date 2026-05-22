@@ -100,12 +100,11 @@ Frontend-koden kan senere bytte datakilde fra inlinet JSON til et
 `parking_app.web.build_map` slik at den kan testes; HTML-malen bruker
 str.replace (ikke f-string) for å unngå brace-konflikt med JS.
 
-### 2026-05-22 — ADR-UTKAST: ParkingRecord-felter for Oslo kommune-data
+### 2026-05-22 — ADR: ParkingRecord-felter for Oslo kommune-data
 
-> Status: **UTKAST — venter på godkjenning fra bruker før implementering.**
-> Dette er svar på "spørsmål 3" av 5 i recon-runden. De andre fire
-> (geometri-lagring, deduplisering, kart-rendering, adapter-splitt) er
-> bevisst utelatt her — de blir egne ADR-utkast etter at modellen er låst.
+> Status: **VEDTATT og IMPLEMENTERT** (commit d87bb63). De andre fire
+> spørsmålene (geometri-lagring, deduplisering, kart-rendering,
+> adapter-splitt) er bevisst utelatt her — de blir egne ADR-er senere.
 
 **Bakgrunn.** Data-recon viste at
 `geodata.bymoslo.no/arcgis/rest/services/geodata/Parkering/MapServer/27`
@@ -204,6 +203,45 @@ bakoverkompatible nullable felter, alle `None` by default:
   navnet skal beskrive hva det er, ikke hvordan det ble målt. Metadata
   om kilde finnes uansett via `source_url` + `source_type`.**
 
+### 2026-05-22 — Oslo kommune-adapter implementert
+
+Lagt til `src/parking_app/adapters/oslo_kommune.py` og
+`src/parking_app/ingest/fetch_oslo_kommune.py` som henter data fra
+`geodata.bymoslo.no/.../Parkering/MapServer/27` (gateparkering joinet med
+priser). 6 206 features hentet i live-test, alle med pris, 90,9 % med
+estimert antall plasser.
+
+**Tre tekniske oppdagelser under implementering** — dokumentert her
+fordi de påvirker fremtidig vedlikehold:
+
+1. **Paginerings-quirk.** Layer 27 har `supportsPagination=false`. Vi
+   gjør ID-basert batching: først `returnIdsOnly=true` for å hente alle
+   OBJECTIDs, deretter batch-spørringer på `WHERE OBJECTID IN (...)`.
+2. **POST i stedet for GET.** En batch på 1000 IDs blir for lang for
+   en URL (HTTP 414). ArcGIS REST godtar POST på `/query` med samme
+   payload.
+3. **Fullt kvalifiserte feltnavn.** Propene har Esri-prefiks
+   (`str.gisowner.STR_Parkering.beregnet_antall`,
+   `samferdsel.gisowner.parkering_pris.pris_elbil`). Vi gjør
+   suffiks-basert oppslag (`_prop(props, "beregnet_antall")`) slik at
+   adapteren overlever en eventuell schema-renaming.
+
+**Pris er en tariff-tabell, ikke ett tall.** Kilden gir
+`"1 time 40 kr, 2 timer 81 kr, 3 timer 122 kr, 1 døgn 204 kr"`. Vi
+parser ut **første-time-prisen** (40) til `price_per_hour_petrol` /
+`price_per_hour_ev`. Resten av tariff-tabellen utsettes — trolig som en
+sekundærtabell senere, ikke som flate felter.
+
+**Navngivning.** Layeret har ingen `vegnavn`/`adresse`/`navn`-felt. Vi
+syntetiserer `"Gateparkering sone {zone} #{objectid}"` inntil
+reverse-geocoding kommer på plass. Dette er en bevisst snarvei; brukere
+kan klikke seg inn på ArcGIS-detaljen via `source_url`.
+
+**Økern Torgvei-sanity.** Rundt brukerens problem-adresse finner adapteren
+48 polygoner med **161 plasser totalt**, mot Statens vegvesens
+"1 plass". Problemet er dermed løst på data-nivå — neste steg er å
+bringe det inn i selve kartet (egen ADR/commit).
+
 ### 2026-05-22 — GitHub Pages + ukentlig auto-bygging, kartet som PWA
 Fase 1.5: publisere kartet på GitHub Pages slik at brukeren åpner
 `https://etmagnussen.github.io/oslo-parking-finder/` på telefonen uten
@@ -285,10 +323,10 @@ Disse reglene gjelder med mindre vi eksplisitt avtaler noe annet.
 | Adapter: Parkeringsregisteret | ✅ | 3 326 aktive Oslo-rader · detalj-berikelse · 1 691 m/gratis-plasser |
 | Adapter: Onepark | 🟡 stub | Implementasjonsplan i modulen |
 | Adapter: Aimo Park | 🟡 stub | Implementasjonsplan i modulen |
-| Adapter: Oslo kommune | 🟡 stub | Implementasjonsplan i modulen |
+| Adapter: Oslo kommune | ✅ | 6 206 gateparkerings-polygoner m/pris, sone, antall · Økern Torgvei 161 plasser |
 | EasyPark | ⛔ utelatt | Lukket API + bare betalingskanal. Se `adapters/easypark.py`. |
 | UI — statisk kart | ✅ | `parking-build-map` → Leaflet HTML, 3 326 markører, filtre, Google Maps-lenker |
-| Tester | ✅ | 15/15 grønne (normalize, enrich, build_map) |
+| Tester | ✅ | 37/37 grønne (normalize, enrich, build_map, models, oslo_kommune) |
 | Verifikasjonsscript | ✅ | `scripts/verify.py` — struktur + imports + pytest + CSV-sanity |
 | CI / scheduling | ⛔ | Ikke startet |
 | Prisdata | ⛔ | Krever operatør-adapter |
