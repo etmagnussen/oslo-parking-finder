@@ -25,6 +25,7 @@ dev = [
 [project.scripts]
 parking-ingest-register = "parking_app.ingest.fetch_register:main"
 parking-ingest-register-details = "parking_app.ingest.fetch_register_details:main"
+parking-build-map = "parking_app.web.build_map:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
