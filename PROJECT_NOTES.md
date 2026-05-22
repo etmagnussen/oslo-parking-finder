@@ -100,6 +100,20 @@ Frontend-koden kan senere bytte datakilde fra inlinet JSON til et
 `parking_app.web.build_map` slik at den kan testes; HTML-malen bruker
 str.replace (ikke f-string) for å unngå brace-konflikt med JS.
 
+### 2026-05-22 — GitHub Pages + ukentlig auto-bygging, kartet som PWA
+Fase 1.5: publisere kartet på GitHub Pages slik at brukeren åpner
+`https://etmagnussen.github.io/oslo-parking-finder/` på telefonen uten
+å installere noe, og kan legge det til på startskjermen som en app.
+GitHub Actions kjører hver søndag 06:00 UTC: ingest → enrich → build →
+deploy. Ingen lokal PC trengs i daglig drift. PWA-elementer (manifest,
+192/512-ikoner, maskable-ikon, theme-color, apple-touch-icon, viewport
+med `viewport-fit=cover` og `100dvh`) lagt inn i HTML-templaten.
+Ikoner genereres reproduserbart av `scripts/make_icons.py` (ren stdlib
+PNG-encoder). Build-mappen `web/dist/` er gitignored — kun kilder
+committes. Konsekvens: brukeren kan jobbe utelukkende fra mobil ved å
+sende prompts til assistenten; assistenten committer; CI bygger og
+publiserer.
+
 ---
 
 ## 3. Gjeldende arbeidsregler
@@ -178,6 +192,11 @@ Disse reglene gjelder med mindre vi eksplisitt avtaler noe annet.
 ---
 
 ## 5. Neste planlagte steg
+
+0. **Aktivere GitHub Pages i repo-innstillinger og kjøre workflow én
+   gang manuelt** — må gjøres én gang etter første push av workflow-fila.
+   Innstillinger → Pages → Source: "GitHub Actions". Deretter Actions →
+   "Build & deploy map" → "Run workflow".
 
 Prioritert. Når et steg er ferdig, flytt til "Gjort" og legg til en
 ADR-post under §2 hvis det innebar et reelt valg.

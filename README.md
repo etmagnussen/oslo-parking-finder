@@ -99,7 +99,26 @@ python scripts/verify.py
 # Bygg det statiske kartet (selvstendig HTML-fil)
 parking-build-map
 # → åpne data/normalized/oslo_parking_map.html i nettleseren
+
+# Bygg som en PWA-pakke til publisering (HTML + manifest + ikoner)
+python scripts/make_icons.py
+parking-build-map --output web/dist/index.html --static-dir web/static
 ```
+
+## Publisert kart (GitHub Pages)
+
+Kartet publiseres automatisk til GitHub Pages og kan åpnes på telefonen
+uten installasjon:
+
+**[etmagnussen.github.io/oslo-parking-finder](https://etmagnussen.github.io/oslo-parking-finder/)**
+
+- **Ukentlig auto-oppdatering.** GitHub Actions kjører hver søndag kl.
+  06:00 UTC, henter fersk data fra Statens vegvesen, bygger kartet og
+  publiserer på nytt. Manuelle kjøringer er også mulig fra Actions-fanen.
+- **Legg til på startskjerm.** I Chrome på Android: meny → "Legg til på
+  startskjerm". I Safari på iOS: del-knappen → "Legg til på hjem-skjerm".
+  Da åpner det seg uten URL-felt og oppfører seg som en app.
+- Workflow-definisjon: [`.github/workflows/build-and-deploy.yml`](.github/workflows/build-and-deploy.yml).
 
 ## Det statiske kartet
 
