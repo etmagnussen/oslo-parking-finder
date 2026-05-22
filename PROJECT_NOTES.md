@@ -73,6 +73,33 @@ planlegger å hente direkte. Hvis vi senere vil vise "betal med EasyPark"
 på en rad, blir det et `payment_methods`-felt på `ParkingRecord`,
 ikke en egen adapter. Dokumentert i `adapters/easypark.py`.
 
+Oppfølging samme dag: bruker påpekte at EasyPark sin *nettside* kan ha
+priser. Sjekket: nei, prissidene handler om EasyParks eget servicegebyr,
+ikke om sone-priser. Bekreftet beslutning.
+
+### 2026-05-21 — Berike Parkeringsregister-data med detaljfelter
+Istedenfor en ny adapter, beriker vi eksisterende rader med kapasitets-
+felter fra detalj-endepunktet (`antallAvgiftsfriePlasser` m.fl.). Dette
+gir oss en konkret gratis-liste uten ny datakilde. Implementert i
+`ingest/fetch_register_details.py` med disk-cache i
+`data/raw/details/<id>.json`.
+
+### 2026-05-21 — Utvide `ParkingRecord` med kapasitetsfelter
+6 nye nullable felter: `paid_spaces`, `free_spaces`, `charging_spaces`,
+`accessible_spaces`, `facility_type`, `is_park_and_ride`. Alle `None`
+by default. `FIELDS` utvidet. `scripts/verify.py` leser nå header
+direkte fra `FIELDS` for å unngå drift.
+
+### 2026-05-22 — Statisk Leaflet-kart som første UI
+"Fase 1": en selvstendig HTML-fil (`parking-build-map`) som leser den
+normaliserte CSV-en og produserer et Leaflet-kart med klyngede markører,
+fargekoding (gratis/blanding/avgift), sidepanel-filtre, og Google Maps-
+lenke per anlegg. Null infrastruktur, gjenbruker eksisterende data.
+Frontend-koden kan senere bytte datakilde fra inlinet JSON til et
+`/api/parking`-endepunkt uten omskriving. Logikken bor i
+`parking_app.web.build_map` slik at den kan testes; HTML-malen bruker
+str.replace (ikke f-string) for å unngå brace-konflikt med JS.
+
 ---
 
 ## 3. Gjeldende arbeidsregler
@@ -137,12 +164,13 @@ Disse reglene gjelder med mindre vi eksplisitt avtaler noe annet.
 | Prosjektstruktur | ✅ | Opprettet 2026-05-21 |
 | Datamodell (`ParkingRecord`) | ✅ | 9 felter, dokumentert i README |
 | Lagring (raw + normalized CSV) | ✅ | `parking_app.storage` |
-| Adapter: Parkeringsregisteret | ✅ | 3 322 aktive Oslo-rader ved første kjøring |
+| Adapter: Parkeringsregisteret | ✅ | 3 326 aktive Oslo-rader · detalj-berikelse · 1 691 m/gratis-plasser |
 | Adapter: Onepark | 🟡 stub | Implementasjonsplan i modulen |
 | Adapter: Aimo Park | 🟡 stub | Implementasjonsplan i modulen |
 | Adapter: Oslo kommune | 🟡 stub | Implementasjonsplan i modulen |
 | EasyPark | ⛔ utelatt | Lukket API + bare betalingskanal. Se `adapters/easypark.py`. |
-| Tester | ✅ | 5/5 grønne (`tests/test_normalize.py`) |
+| UI — statisk kart | ✅ | `parking-build-map` → Leaflet HTML, 3 326 markører, filtre, Google Maps-lenker |
+| Tester | ✅ | 15/15 grønne (normalize, enrich, build_map) |
 | Verifikasjonsscript | ✅ | `scripts/verify.py` — struktur + imports + pytest + CSV-sanity |
 | CI / scheduling | ⛔ | Ikke startet |
 | Prisdata | ⛔ | Krever operatør-adapter |
@@ -154,20 +182,20 @@ Disse reglene gjelder med mindre vi eksplisitt avtaler noe annet.
 Prioritert. Når et steg er ferdig, flytt til "Gjort" og legg til en
 ADR-post under §2 hvis det innebar et reelt valg.
 
-1. **Oslo kommune-adapter — takstgrupper.** Parse priser per takstgruppe
+1. **Vurdere GitHub Pages-publisering.** Når brukeren har testet det
+   statiske kartet en stund, vurder om vi skal aktivere Pages slik at
+   kartet er tilgjengelig fra telefonen uten filoverføring.
+2. **Oslo kommune-adapter — takstgrupper.** Parse priser per takstgruppe
    (2012, 2200, 2300, ...) fra
    [oslo.kommune.no](https://www.oslo.kommune.no/gate-transport-og-parkering/parkering/priser-og-betaling-for-parkering/).
    Gir oss "hva koster sone X for elbil/fossilbil", samt avgiftstider
    (når er det gratis utenfor avgiftstid).
-2. **Utvid `ParkingRecord` med prisfelter.** Foreslått:
+3. **Utvid `ParkingRecord` med prisfelter.** Foreslått:
    `tariff_group`, `price_per_hour_petrol`, `price_per_hour_ev`,
    `free_outside_hours_from`, `free_outside_hours_to`, `currency`.
    Alle nullable.
-3. **Onepark-adapter (MVP).** HTML-parsing av anleggslistene på
+4. **Onepark-adapter (MVP).** HTML-parsing av anleggslistene på
    onepark.no, med priser om mulig. Offline-test med lagret HTML-fikstur.
-4. **Google Maps deep-link helper.** Funksjon som genererer
-   `https://www.google.com/maps/dir/?api=1&destination={lat},{lon}` per
-   rad. Trinn på veien mot appen brukeren beskrev.
 5. **Oslo kommune-adapter — sone-GeoJSON.** Identifiser riktig datasett
    på data.oslo.kommune.no for soner/beboerparkering. Mapper polygon
    → representativt punkt + sonenavn, lenker mot takstgruppe.
@@ -181,6 +209,8 @@ ADR-post under §2 hvis det innebar et reelt valg.
    Oslo bbox, ingen duplikat-`id`-er, ikke-tomme `name`.
 10. **Schedulering.** GitHub Actions: daglig ingest, commit normaliserte
     CSV-er for historikk-diff.
+11. **Fase 2 — FastAPI-backend.** Når prisdata er inne. Frontend
+    gjenbrukes; bytter ut inlinet JSON med fetch til `/api/parking`.
 
 ---
 
@@ -212,3 +242,13 @@ Ting vi ikke har bestemt enda. Når en blir besvart, flytt svaret til
 - **2026-05-21** — EasyPark evaluert og forkastet som datakilde
   (ADR-post over). Lagt til `adapters/easypark.py` som dokumentert
   blindspor (ingen `fetch()`).
+- **2026-05-21** — Utvidet `ParkingRecord` med 6 kapasitetsfelter.
+  Implementert `ingest/fetch_register_details.py` med disk-cache.
+  Lagt til 5 nye tester (10/10 grønne). Full ingest kjørt: 3 326/3 326
+  anlegg beriket, **1 691 har minst én avgiftsfri plass**, 573 lade,
+  29 innfartsparkering.
+- **2026-05-22** — Bygd statisk Leaflet-kart (`parking-build-map`):
+  3 326 markører, fargekoding etter gratis/avgift, sidepanel-filtre,
+  Google Maps-deep-links. 5 nye tester (15/15 grønne totalt).
+  Verifisert visuelt i Playwright — filter "bare gratis" gir 1 691
+  anlegg, identisk med CSV-tellingen.

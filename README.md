@@ -95,7 +95,28 @@ pytest -q
 
 # Hel-prosjekt verifikasjon (struktur + imports + pytest + CSV-sanity)
 python scripts/verify.py
+
+# Bygg det statiske kartet (selvstendig HTML-fil)
+parking-build-map
+# → åpne data/normalized/oslo_parking_map.html i nettleseren
 ```
+
+## Det statiske kartet
+
+`parking-build-map` leser den normaliserte CSV-en og produserer en
+**enkeltstående HTML-fil** med:
+
+- Leaflet-kart sentrert på Oslo, med ~3 300 anlegg som klikkbare
+  markatorer (klynget for ytelse).
+- Fargekoding: grønn = kun gratis-plasser, gul = blanding, rød = kun
+  avgift, grå = ukjent.
+- Popup per anlegg med navn, operatør, plasstelling, og to lenker:
+  *Veibeskrivelse i Google Maps* + *Detaljer hos Statens vegvesen*.
+- Sidepanel med filtre: bare gratis, har lade, innfartsparkering, HC.
+  Telleren oppdateres live.
+
+Filen er ~1,5 MB, har ingen build-pipeline, og kan både åpnes lokalt og
+legges på GitHub Pages senere uten endringer.
 
 Etter kjøring:
 

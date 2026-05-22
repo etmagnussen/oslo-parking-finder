@@ -12,6 +12,9 @@ data/raw/*
 data/normalized/*
 !data/normalized/.gitkeep
 
+# Generated screenshots / previews
+*.png
+
 # Tooling
 .pytest_cache/
 .ruff_cache/
