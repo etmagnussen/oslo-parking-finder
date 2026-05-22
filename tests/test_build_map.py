@@ -9,6 +9,7 @@ import pytest
 from parking_app.web.build_map import (
     build_from_csv,
     classify,
+    copy_static_assets,
     csv_to_features,
     render_html,
 )
@@ -89,3 +90,41 @@ def test_build_from_csv_roundtrip(tmp_path: Path) -> None:
 def test_build_from_csv_missing_input_raises(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         build_from_csv(tmp_path / "missing.csv", tmp_path / "out.html")
+
+
+def test_copy_static_assets_copies_nested_files(tmp_path: Path) -> None:
+    static = tmp_path / "static"
+    (static / "icons").mkdir(parents=True)
+    (static / "manifest.webmanifest").write_text("{}", encoding="utf-8")
+    (static / "icons" / "icon-192.png").write_bytes(b"PNGSTUB")
+    dest = tmp_path / "dist"
+    copied = copy_static_assets(static, dest)
+    assert {p.name for p in copied} == {"manifest.webmanifest", "icon-192.png"}
+    assert (dest / "manifest.webmanifest").read_text(encoding="utf-8") == "{}"
+    assert (dest / "icons" / "icon-192.png").read_bytes() == b"PNGSTUB"
+
+
+def test_copy_static_assets_missing_dir_is_noop(tmp_path: Path) -> None:
+    # Should not raise when the static dir doesn't exist.
+    copied = copy_static_assets(tmp_path / "does_not_exist", tmp_path / "dist")
+    assert copied == []
+
+
+def test_build_from_csv_with_static_dir(tmp_path: Path) -> None:
+    csv_path = tmp_path / "in.csv"
+    csv_path.write_text(
+        "name,address,municipality,lat,lon,operator,source_url,source_type,last_checked,"
+        "paid_spaces,free_spaces,charging_spaces,accessible_spaces,facility_type,is_park_and_ride\n"
+        "Test,Foo 1,Oslo,59.9,10.7,Op,https://x/1,parkeringsregister,"
+        "2026-05-22T05:00:00+00:00,5,3,0,0,LANGS_KJOREBANE,False\n",
+        encoding="utf-8",
+    )
+    static = tmp_path / "static"
+    static.mkdir()
+    (static / "manifest.webmanifest").write_text('{"name":"x"}', encoding="utf-8")
+    out_path = tmp_path / "dist" / "index.html"
+    stats = build_from_csv(csv_path, out_path, static_dir=static)
+    assert stats["assets_copied"] == 1
+    assert (out_path.parent / "manifest.webmanifest").exists()
+    html = out_path.read_text(encoding="utf-8")
+    assert 'rel="manifest"' in html

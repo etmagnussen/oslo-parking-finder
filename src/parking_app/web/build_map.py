@@ -28,6 +28,7 @@ import argparse
 import csv
 import json
 import logging
+import shutil
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -130,14 +131,27 @@ _HTML_TEMPLATE = r"""<!doctype html>
 <html lang="no">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2ecc71">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Parkering">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
+<link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png">
 <title>Parkering i Oslo</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
 <style>
-  html, body { margin: 0; height: 100%; font-family: -apple-system, system-ui, sans-serif; }
-  #app { display: flex; height: 100vh; }
+  html, body { margin: 0; height: 100%; font-family: -apple-system, system-ui, sans-serif;
+                background: #fafafa; }
+  /* Use dynamic viewport height so iOS Safari toolbar doesn't crop the map. */
+  #app { display: flex; height: 100vh; height: 100dvh;
+         padding: env(safe-area-inset-top) env(safe-area-inset-right)
+                  env(safe-area-inset-bottom) env(safe-area-inset-left);
+         box-sizing: border-box; }
   #sidebar {
     width: 280px; padding: 14px 16px; box-sizing: border-box;
     border-right: 1px solid #ddd; background: #fafafa; overflow-y: auto;
@@ -306,7 +320,34 @@ def render_html(features: list[dict[str, Any]], generated_at: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def build_from_csv(input_path: Path, output_path: Path) -> dict[str, Any]:
+def copy_static_assets(static_dir: Path, dest_dir: Path) -> list[Path]:
+    """Copy PWA assets (manifest, icons) next to the generated HTML.
+
+    Returns the list of destination paths written. Missing source files
+    are skipped silently so the build doesn't break when icons haven't
+    been generated yet.
+    """
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    copied: list[Path] = []
+    if not static_dir.exists():
+        return copied
+    for src in static_dir.rglob("*"):
+        if not src.is_file():
+            continue
+        rel = src.relative_to(static_dir)
+        dst = dest_dir / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+        copied.append(dst)
+    return copied
+
+
+def build_from_csv(
+    input_path: Path,
+    output_path: Path,
+    *,
+    static_dir: Path | None = None,
+) -> dict[str, Any]:
     if not input_path.exists():
         raise FileNotFoundError(
             f"Normalized CSV not found: {input_path}. "
@@ -328,6 +369,10 @@ def build_from_csv(input_path: Path, output_path: Path) -> dict[str, Any]:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(html, encoding="utf-8")
 
+    assets: list[Path] = []
+    if static_dir is not None:
+        assets = copy_static_assets(static_dir, output_path.parent)
+
     by_cat: dict[str, int] = {}
     for f in features:
         by_cat[f["category"]] = by_cat.get(f["category"], 0) + 1
@@ -337,6 +382,7 @@ def build_from_csv(input_path: Path, output_path: Path) -> dict[str, Any]:
         "features": len(features),
         "by_category": by_cat,
         "generated_at": generated_at,
+        "assets_copied": len(assets),
     }
 
 
@@ -346,6 +392,9 @@ def _build_parser() -> argparse.ArgumentParser:
                    help=f"Normalized CSV input. Default: {DEFAULT_INPUT}")
     p.add_argument("--output", default=DEFAULT_OUTPUT,
                    help=f"HTML output path. Default: {DEFAULT_OUTPUT}")
+    p.add_argument("--static-dir", default=None,
+                   help="Optional dir whose contents (manifest, icons) are copied "
+                        "next to the generated HTML. Required for PWA install.")
     p.add_argument("-v", "--verbose", action="store_true")
     return p
 
@@ -359,12 +408,17 @@ def main(argv: list[str] | None = None) -> int:
     root = project_root()
     in_path = (root / args.input) if not Path(args.input).is_absolute() else Path(args.input)
     out_path = (root / args.output) if not Path(args.output).is_absolute() else Path(args.output)
+    static_dir: Path | None = None
+    if args.static_dir is not None:
+        s = Path(args.static_dir)
+        static_dir = s if s.is_absolute() else (root / s)
 
-    stats = build_from_csv(in_path, out_path)
+    stats = build_from_csv(in_path, out_path, static_dir=static_dir)
     print(
         "OK: {features} markers written to {output}\n"
         "  by category: {by_category}\n"
-        "  generated_at: {generated_at}".format(**stats)
+        "  generated_at: {generated_at}\n"
+        "  assets copied: {assets_copied}".format(**stats)
     )
     return 0
 

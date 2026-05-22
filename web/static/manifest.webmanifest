@@ -1,0 +1,16 @@
+{
+  "name": "Parkering i Oslo",
+  "short_name": "Parkering",
+  "description": "Statisk kart over parkering i Oslo med gratis-filter og veibeskrivelse.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fafafa",
+  "theme_color": "#2ecc71",
+  "lang": "no",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
