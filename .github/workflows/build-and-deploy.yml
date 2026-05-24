@@ -56,11 +56,33 @@ jobs:
         # Cache disabled in CI — we always want fresh capacity numbers.
         run: parking-ingest-register-details --sleep 0.1
 
+      - name: Ingest Oslo kommune gateparkering (Bymiljøetaten)
+        # Pulls ~6.2k polygons from layer 27 with prices, zones and capacity.
+        # Network-bound; allowed to fail without aborting the deploy so a
+        # transient Oslo-side outage doesn't take the whole map offline.
+        continue-on-error: true
+        run: parking-ingest-oslo-kommune
+
       - name: Generate PWA icons
         run: python scripts/make_icons.py
 
       - name: Build map into web/dist/
-        run: parking-build-map --output web/dist/index.html --static-dir web/static
+        # If the Oslo kommune ingest failed, its CSV may be missing — fall
+        # back to register-only so we still ship a working map.
+        run: |
+          if [ -f data/normalized/oslo_kommune_gateparkering.csv ]; then
+            parking-build-map \
+              --inputs data/normalized/parkeringsregister.csv \
+                       data/normalized/oslo_kommune_gateparkering.csv \
+              --output web/dist/index.html \
+              --static-dir web/static
+          else
+            echo "WARN: Oslo kommune CSV missing — building register-only map"
+            parking-build-map \
+              --inputs data/normalized/parkeringsregister.csv \
+              --output web/dist/index.html \
+              --static-dir web/static
+          fi
 
       - name: Add .nojekyll so Pages serves files as-is
         run: touch web/dist/.nojekyll
