@@ -413,3 +413,15 @@ Ting vi ikke har bestemt enda. Når en blir besvart, flytt svaret til
   Google Maps-deep-links. 5 nye tester (15/15 grønne totalt).
   Verifisert visuelt i Playwright — filter "bare gratis" gir 1 691
   anlegg, identisk med CSV-tellingen.
+- **2026-05-22** — Oslo kommune-data integrert i kartet. `build_map`
+  støtter nå flere CSV-inputs (`--inputs ...`), `classify()` bruker
+  pris/time når den finnes (>0 → "paid"), og popup viser pris
+  bensin/elbil, sone, maks-min, aktive timer, totalplasser og notater
+  fra Oslo kommune-rader. Sidepanel krediterer begge kilder, og
+  "Detaljer hos Statens vegvesen"-lenken er nå betinget av source_type
+  (skjult for oslo_kommune-rader som peker på rå GeoJSON-endpoint).
+  Lokal build: **9 530 markører** (3 324 register + 6 206 Bymiljøetaten).
+  Workflow oppdatert: nytt steg henter Oslo kommune-data
+  (`continue-on-error: true` så et midlertidig API-utfall ikke tar
+  ned hele kartet), bygg-steget bruker `--inputs` med fallback til
+  register-only hvis CSV mangler. Tester 40/40 grønne.
