@@ -128,3 +128,77 @@ def test_build_from_csv_with_static_dir(tmp_path: Path) -> None:
     assert (out_path.parent / "manifest.webmanifest").exists()
     html = out_path.read_text(encoding="utf-8")
     assert 'rel="manifest"' in html
+
+
+# ---------------------------------------------------------------------------
+# Oslo kommune integration (pricing fields + multi-input)
+# ---------------------------------------------------------------------------
+
+
+def test_classify_with_price_per_hour() -> None:
+    # When a price is provided, it overrides paid/free counts.
+    assert classify(None, None, price_per_hour=42.0) == "paid"
+    assert classify(None, None, price_per_hour=0.0) == "free"
+    # price wins even if paid/free counts also exist
+    assert classify(0, 5, price_per_hour=10.0) == "paid"
+
+
+def test_csv_to_features_reads_oslo_kommune_pricing_fields() -> None:
+    rows = [
+        {
+            "name": "Gateparkering sone 1 #123",
+            "lat": "59.92", "lon": "10.78",
+            "source_type": "oslo_kommune",
+            "tariff_group": "sone 1",
+            "price_per_hour_petrol": "40",
+            "price_per_hour_ev": "20",
+            "price_max_minutes": "120",
+            "price_active_hours": "08-17 (man-fre)",
+            "residential_zone": "1",
+            "total_spaces": "5",
+            "notes": "Avgift hverdager",
+        }
+    ]
+    out = csv_to_features(rows)
+    assert len(out) == 1
+    f = out[0]
+    assert f["category"] == "paid"  # price > 0 classifies as paid
+    assert f["price_petrol"] == 40.0
+    assert f["price_ev"] == 20.0
+    assert f["price_max_min"] == 120
+    assert f["active_hours"] == "08-17 (man-fre)"
+    assert f["zone"] == "1"
+    assert f["tariff"] == "sone 1"
+    assert f["total"] == 5
+    assert f["notes"] == "Avgift hverdager"
+    assert f["source_type"] == "oslo_kommune"
+
+
+def test_build_from_csv_merges_multiple_inputs(tmp_path: Path) -> None:
+    """Multi-input: rows from both CSVs land in the same HTML, latest timestamp wins."""
+    a = tmp_path / "register.csv"
+    a.write_text(
+        "name,lat,lon,source_type,source_url,last_checked,"
+        "paid_spaces,free_spaces,is_park_and_ride\n"
+        "P-hus A,59.91,10.74,parkeringsregister,https://x/1,"
+        "2026-05-20T05:00:00+00:00,10,2,False\n",
+        encoding="utf-8",
+    )
+    b = tmp_path / "oslo.csv"
+    b.write_text(
+        "name,lat,lon,source_type,source_url,last_checked,"
+        "price_per_hour_petrol,price_per_hour_ev,residential_zone,total_spaces\n"
+        "Gate B,59.93,10.78,oslo_kommune,https://geodata/27,"
+        "2026-05-22T05:00:00+00:00,40,20,1,5\n",
+        encoding="utf-8",
+    )
+    out = tmp_path / "out.html"
+    stats = build_from_csv([a, b], out)
+    assert stats["features"] == 2
+    assert stats["generated_at"] == "2026-05-22T05:00:00+00:00"
+    assert stats["by_source"] == {str(a): 1, str(b): 1}
+    html = out.read_text(encoding="utf-8")
+    assert "P-hus A" in html and "Gate B" in html
+    # Sidebar credits both sources now
+    assert "Statens vegvesen" in html
+    assert "Oslo kommune" in html

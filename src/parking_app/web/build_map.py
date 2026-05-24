@@ -36,7 +36,12 @@ from ..storage import project_root
 
 LOG = logging.getLogger("parking_app.web.build_map")
 
-DEFAULT_INPUT = "data/normalized/parkeringsregister.csv"
+# Multiple CSVs are merged into one map. Order matters only for the
+# stats counter; markers from all sources are rendered side-by-side.
+DEFAULT_INPUTS = (
+    "data/normalized/parkeringsregister.csv",
+    "data/normalized/oslo_kommune_gateparkering.csv",
+)
 DEFAULT_OUTPUT = "data/normalized/oslo_parking_map.html"
 
 # Oslo city centre — used as initial map center.
@@ -67,8 +72,22 @@ def _to_float(value: str | None) -> float | None:
         return None
 
 
-def classify(paid: int | None, free: int | None) -> str:
-    """Categorise a facility by paid/free spaces."""
+def classify(
+    paid: int | None,
+    free: int | None,
+    *,
+    price_per_hour: float | None = None,
+) -> str:
+    """Categorise a facility by paid/free spaces.
+
+    When the source provides an explicit hourly price (Oslo kommune), we
+    let that decide: any price > 0 marks the facility as paid even if
+    the spaces-split is unknown. A price of exactly 0 means free.
+    """
+    if price_per_hour is not None:
+        if price_per_hour > 0:
+            return "paid"
+        return "free"
     if paid is None and free is None:
         return "unknown"
     p = paid or 0
@@ -85,7 +104,9 @@ def classify(paid: int | None, free: int | None) -> str:
 def csv_to_features(rows: Iterable[dict[str, str]]) -> list[dict[str, Any]]:
     """Project CSV rows into the compact JSON used by the map JS.
 
-    Skips rows without coordinates — they can't be plotted.
+    Skips rows without coordinates — they can't be plotted. Reads both
+    the Statens vegvesen capacity fields (paid_spaces, free_spaces, ...)
+    and the Oslo kommune pricing/zone fields when present.
     """
     features: list[dict[str, Any]] = []
     for r in rows:
@@ -101,11 +122,22 @@ def csv_to_features(rows: Iterable[dict[str, str]]) -> list[dict[str, Any]]:
         pnr_raw = (r.get("is_park_and_ride") or "").strip().lower()
         pnr = True if pnr_raw == "true" else False if pnr_raw == "false" else None
 
+        # Oslo kommune pricing/zone fields (all optional).
+        price_petrol = _to_float(r.get("price_per_hour_petrol"))
+        price_ev = _to_float(r.get("price_per_hour_ev"))
+        price_max_min = _to_int(r.get("price_max_minutes"))
+        active_hours = (r.get("price_active_hours") or "").strip() or None
+        zone = (r.get("residential_zone") or "").strip() or None
+        tariff = (r.get("tariff_group") or "").strip() or None
+        total = _to_int(r.get("total_spaces"))
+        notes = (r.get("notes") or "").strip() or None
+
         features.append(
             {
                 "name": r.get("name") or "(uten navn)",
                 "address": r.get("address") or "",
                 "operator": r.get("operator") or "",
+                "source_type": r.get("source_type") or "",
                 "lat": lat,
                 "lon": lon,
                 "paid": paid,
@@ -115,7 +147,16 @@ def csv_to_features(rows: Iterable[dict[str, str]]) -> list[dict[str, Any]]:
                 "park_and_ride": pnr,
                 "facility_type": r.get("facility_type") or "",
                 "source_url": r.get("source_url") or "",
-                "category": classify(paid, free),
+                # Pricing / zone (Oslo kommune)
+                "price_petrol": price_petrol,
+                "price_ev": price_ev,
+                "price_max_min": price_max_min,
+                "active_hours": active_hours,
+                "zone": zone,
+                "tariff": tariff,
+                "total": total,
+                "notes": notes,
+                "category": classify(paid, free, price_per_hour=price_petrol),
             }
         )
     return features
@@ -186,7 +227,7 @@ _HTML_TEMPLATE = r"""<!doctype html>
 <div id="app">
   <aside id="sidebar">
     <h1>Parkering i Oslo</h1>
-    <p class="lead">Kilde: Statens vegvesen — Parkeringsregisteret. Sist beriket: __GENERATED_AT__.</p>
+    <p class="lead">Kilder: Statens vegvesen (Parkeringsregisteret) og Oslo kommune (Bymiljøetaten — gateparkering). Sist beriket: __GENERATED_AT__.</p>
 
     <div class="legend">
       <div><span class="swatch free"></span>kun gratis-plasser</div>
@@ -233,21 +274,54 @@ function makeIcon(category) {
   });
 }
 
+const SOURCE_LABELS = {
+  parkeringsregister: "Statens vegvesen",
+  oslo_kommune: "Oslo kommune (Bymiljøetaten)",
+};
+
 function popupHtml(f) {
   const gmaps = "https://www.google.com/maps/dir/?api=1&destination=" + f.lat + "," + f.lon;
+
+  // Capacity stats (Statens vegvesen has paid/free/charging/accessible).
   const stats = [];
   if (f.free !== null && f.free !== undefined) stats.push("Gratis: <b>" + f.free + "</b>");
   if (f.paid !== null && f.paid !== undefined) stats.push("Avgift: <b>" + f.paid + "</b>");
   if (f.charging) stats.push("Lade: " + f.charging);
   if (f.accessible) stats.push("HC: " + f.accessible);
+  if (f.total && !(f.free || f.paid)) stats.push("Totalt: <b>" + f.total + "</b>");
+
+  // Pricing / zone (Oslo kommune).
+  const price = [];
+  if (f.price_petrol !== null && f.price_petrol !== undefined) {
+    price.push("Bensin/diesel: <b>" + f.price_petrol + " kr/t</b>");
+  }
+  if (f.price_ev !== null && f.price_ev !== undefined) {
+    price.push("Elbil: <b>" + f.price_ev + " kr/t</b>");
+  }
+  if (f.price_max_min) price.push("Maks: " + f.price_max_min + " min");
+  if (f.active_hours) price.push(escapeHtml(f.active_hours));
+  if (f.zone) price.push("Sone: " + escapeHtml(f.zone));
+
+  const sourceLabel = SOURCE_LABELS[f.source_type] || f.source_type || "";
+  const metaParts = [];
+  if (f.operator) metaParts.push(escapeHtml(f.operator));
+  if (f.address) metaParts.push(escapeHtml(f.address));
+  if (sourceLabel) metaParts.push("Kilde: " + escapeHtml(sourceLabel));
+
+  // Only link back to the source detail page when it's actually useful;
+  // the Oslo kommune source_url is a raw GeoJSON endpoint which would be
+  // unhelpful for a regular user.
+  const showSourceLink = f.source_url && f.source_type === "parkeringsregister";
+
   return (
     '<div class="popup-title">' + escapeHtml(f.name) + "</div>" +
-    '<div class="popup-meta">' + escapeHtml(f.operator || "") +
-      (f.address ? " · " + escapeHtml(f.address) : "") + "</div>" +
+    (metaParts.length ? '<div class="popup-meta">' + metaParts.join(" · ") + "</div>" : "") +
     (stats.length ? '<div class="popup-stats">' + stats.join(" ") + "</div>" : "") +
+    (price.length ? '<div class="popup-stats">' + price.join(" · ") + "</div>" : "") +
+    (f.notes ? '<div class="popup-meta">' + escapeHtml(f.notes) + "</div>" : "") +
     '<div class="popup-links">' +
       '<a href="' + gmaps + '" target="_blank" rel="noopener">Veibeskrivelse i Google Maps →</a>' +
-      (f.source_url ? '<a href="' + f.source_url + '" target="_blank" rel="noopener">Detaljer hos Statens vegvesen →</a>' : "") +
+      (showSourceLink ? '<a href="' + f.source_url + '" target="_blank" rel="noopener">Detaljer hos Statens vegvesen →</a>' : "") +
     "</div>"
   );
 }
@@ -343,27 +417,40 @@ def copy_static_assets(static_dir: Path, dest_dir: Path) -> list[Path]:
 
 
 def build_from_csv(
-    input_path: Path,
+    input_paths: list[Path] | Path,
     output_path: Path,
     *,
     static_dir: Path | None = None,
 ) -> dict[str, Any]:
-    if not input_path.exists():
-        raise FileNotFoundError(
-            f"Normalized CSV not found: {input_path}. "
-            "Run `parking-ingest-register-details` first."
-        )
-    with input_path.open(encoding="utf-8") as fh:
-        features = csv_to_features(csv.DictReader(fh))
+    """Build the map HTML from one or more normalized CSV files.
 
-    # Use the most recent last_checked timestamp from the CSV as "generated_at".
-    # Fall back to "ukjent" if missing.
-    with input_path.open(encoding="utf-8") as fh:
-        ts = max(
-            (r.get("last_checked", "") for r in csv.DictReader(fh)),
-            default="",
-        )
-    generated_at = ts or "ukjent"
+    Multiple CSVs are concatenated into a single feature list. Each
+    feature retains its own ``source_type`` so the popup can render
+    source-specific labels and links.
+    """
+    # Accept a single Path for backwards compatibility with older tests.
+    if isinstance(input_paths, Path):
+        input_paths = [input_paths]
+
+    features: list[dict[str, Any]] = []
+    timestamps: list[str] = []
+    per_source: dict[str, int] = {}
+
+    for input_path in input_paths:
+        if not input_path.exists():
+            raise FileNotFoundError(
+                f"Normalized CSV not found: {input_path}. "
+                "Run the relevant ingest command first."
+            )
+        with input_path.open(encoding="utf-8") as fh:
+            rows = list(csv.DictReader(fh))
+        before = len(features)
+        features.extend(csv_to_features(rows))
+        per_source[str(input_path)] = len(features) - before
+        timestamps.extend(r.get("last_checked", "") for r in rows)
+
+    # Use the most recent last_checked across ALL inputs as "generated_at".
+    generated_at = max((t for t in timestamps if t), default="") or "ukjent"
 
     html = render_html(features, generated_at)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -377,10 +464,11 @@ def build_from_csv(
     for f in features:
         by_cat[f["category"]] = by_cat.get(f["category"], 0) + 1
     return {
-        "input": str(input_path),
+        "inputs": [str(p) for p in input_paths],
         "output": str(output_path),
         "features": len(features),
         "by_category": by_cat,
+        "by_source": per_source,
         "generated_at": generated_at,
         "assets_copied": len(assets),
     }
@@ -388,8 +476,15 @@ def build_from_csv(
 
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0] if __doc__ else "")
-    p.add_argument("--input", default=DEFAULT_INPUT,
-                   help=f"Normalized CSV input. Default: {DEFAULT_INPUT}")
+    p.add_argument(
+        "--inputs",
+        nargs="+",
+        default=list(DEFAULT_INPUTS),
+        help=(
+            "One or more normalized CSV inputs (space-separated). "
+            f"Default: {' '.join(DEFAULT_INPUTS)}"
+        ),
+    )
     p.add_argument("--output", default=DEFAULT_OUTPUT,
                    help=f"HTML output path. Default: {DEFAULT_OUTPUT}")
     p.add_argument("--static-dir", default=None,
@@ -406,17 +501,21 @@ def main(argv: list[str] | None = None) -> int:
         format="%(asctime)s %(levelname)s %(name)s — %(message)s",
     )
     root = project_root()
-    in_path = (root / args.input) if not Path(args.input).is_absolute() else Path(args.input)
+    in_paths: list[Path] = []
+    for raw in args.inputs:
+        p = Path(raw)
+        in_paths.append(p if p.is_absolute() else (root / p))
     out_path = (root / args.output) if not Path(args.output).is_absolute() else Path(args.output)
     static_dir: Path | None = None
     if args.static_dir is not None:
         s = Path(args.static_dir)
         static_dir = s if s.is_absolute() else (root / s)
 
-    stats = build_from_csv(in_path, out_path, static_dir=static_dir)
+    stats = build_from_csv(in_paths, out_path, static_dir=static_dir)
     print(
         "OK: {features} markers written to {output}\n"
         "  by category: {by_category}\n"
+        "  by source: {by_source}\n"
         "  generated_at: {generated_at}\n"
         "  assets copied: {assets_copied}".format(**stats)
     )
