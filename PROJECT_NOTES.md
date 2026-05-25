@@ -8,6 +8,13 @@ holde retning over lange tråder.
 > hvordan koden brukes**, **denne filen er sannheten om hvor vi er på
 > vei og hvorfor**.
 
+## Hurtigreferanser
+
+- **Live-kart (kanonisk URL):** https://etmagnussen.github.io/oslo-parking-finder/
+- **Repo:** https://github.com/etmagnussen/oslo-parking-finder
+- **GitHub Actions:** https://github.com/etmagnussen/oslo-parking-finder/actions
+- **Default branch:** `main` — push hit utløser bygg + deploy.
+
 ---
 
 ## 1. Mål
@@ -425,3 +432,28 @@ Ting vi ikke har bestemt enda. Når en blir besvart, flytt svaret til
   (`continue-on-error: true` så et midlertidig API-utfall ikke tar
   ned hele kartet), bygg-steget bruker `--inputs` med fallback til
   register-only hvis CSV mangler. Tester 40/40 grønne.
+- **2026-05-25** — Feilsøkt rapport om "fortsatt bare gammelt Statens
+  vegvesen-punkt ved Økern Torgvei". Konklusjon: **deploy var aldri
+  feil**. CI-loggen for run `26372769652` (workflow_dispatch
+  2026-05-24T21:06Z) viser:
+  - Oslo kommune-ingest: 6 206 features hentet OK
+  - Build: **OK: 9528 markers written** med
+    `by_source: {parkeringsregister: 3322, oslo_kommune: 6206}`
+  - Live-HTML (5,5 MB) hentet fra
+    `https://etmagnussen.github.io/oslo-parking-finder/` inneholder:
+    - Sidebar: "Kilder: Statens vegvesen ... og Oslo kommune
+      (Bymiljøetaten ...)"
+    - "Sist beriket: 2026-05-24T21:14:53+00:00"
+    - 6 206 `oslo_kommune`-feature-objekter
+    - 3 features rundt Økern Torgvei (59.936, 10.807), inkludert
+      én med `price_petrol=40.0, zone=J`
+  - Brukerens skjermdump viste fortsatt gammel timestamp
+    (`2026-05-22T11:45:41+00:00`) → **mobilcache**. Skjedde fordi
+    HTML-en før i dag ikke hadde no-cache-meta-tags og Chrome på
+    Android holdt på den lokale kopien.
+  - Fiks: lagt til `<meta http-equiv="Cache-Control" ...>`,
+    `<meta http-equiv="Pragma" ...>` og en `build-generated-at`-meta
+    i `<head>` for å tvinge revalidering ved hvert besøk.
+  - **Brukeren må gjøre én hard refresh** for å bryte ut av den
+    eksisterende caching — etter det vil cache-headerne sikre at
+    fremtidige deploys synes umiddelbart.

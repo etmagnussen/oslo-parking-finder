@@ -173,6 +173,12 @@ _HTML_TEMPLATE = r"""<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Cache hints: the HTML is regenerated on every deploy. Tell aggressive
+     mobile caches (Chrome on Android in particular) to revalidate so users
+     always see the latest 'Sist beriket'-stamp and feature set. -->
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="build-generated-at" content="__GENERATED_AT__">
 <meta name="theme-color" content="#2ecc71">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
